@@ -1,0 +1,44 @@
+{
+  "manifest_version": 3,
+  "name": "YouTube 字幕画中画",
+  "version": "1.0.0",
+  "description": "用一个极小的置顶窗口只显示 YouTube 字幕，并可在窗口内调节倍速与字号。",
+  "minimum_chrome_version": "116",
+  "permissions": ["storage"],
+  "host_permissions": ["https://www.youtube.com/*"],
+  "action": {
+    "default_title": "YouTube 字幕画中画",
+    "default_popup": "src/popup/popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.youtube.com/*"],
+      "js": [
+        "src/shared/protocol.js",
+        "src/shared/selectors.js",
+        "src/shared/settings.js",
+        "src/ui/ui-styles.js",
+        "src/ui/ui-template.js",
+        "src/ui/pip-host.js",
+        "src/content/caption-tracker.js",
+        "src/content/float-window.js",
+        "src/content/content-isolated.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "matches": ["https://www.youtube.com/*"],
+      "js": [
+        "src/shared/protocol.js",
+        "src/ui/ui-styles.js",
+        "src/ui/ui-template.js",
+        "src/ui/pip-host.js",
+        "src/content/content-main.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false,
+      "world": "MAIN"
+    }
+  ]
+}

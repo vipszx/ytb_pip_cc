@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>字幕画中画</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div class="panel">
+      <header class="head">
+        <div class="mark">CC</div>
+        <div class="title">
+          <h1>字幕画中画</h1>
+          <p>只显示字幕 · 系统级置顶</p>
+        </div>
+      </header>
+
+      <section class="field">
+        <div class="field-head">
+          <label for="fontRange">字幕字号</label>
+          <span class="value" id="fontVal">20px</span>
+        </div>
+        <input id="fontRange" class="range" type="range" min="12" max="40" step="2" value="20" />
+      </section>
+
+      <section class="field">
+        <div class="field-head">
+          <label>默认倍速</label>
+          <span class="value" id="speedVal">1×</span>
+        </div>
+        <div class="pills" id="speedPills"></div>
+      </section>
+
+      <section class="field switch">
+        <label for="autoCc">
+          <span>打开时自动开启字幕</span>
+          <small>视频需自带字幕轨道</small>
+        </label>
+        <input id="autoCc" type="checkbox" checked />
+      </section>
+
+      <div class="actions">
+        <button id="openBtn" class="btn primary" type="button">打开字幕小窗</button>
+        <button id="closeBtn" class="btn ghost" type="button">关闭</button>
+      </div>
+
+      <p class="tip" id="tip">
+        小窗需在 YouTube 视频页使用。若此处点击无反应，请点击播放器右下角的字幕小窗图标。
+      </p>
+    </div>
+
+    <script src="../shared/settings.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>
