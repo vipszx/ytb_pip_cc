@@ -44,11 +44,31 @@ html, body {
   overflow:hidden;
 }
 
-.ytbpip-text{
+/* 歌词式三行：上一句 / 当前句 / 下一句。字号由 ui-template 的 fitText() 实测后调整 */
+.ytbpip-lines{
   flex:0 1 auto;
   min-height:0;
-  /* 字号默认用用户设定值，放不下时由 ui-template 的 fitText() 按实际文字缩到 3 行内 */
+  display:flex; flex-direction:column; align-items:stretch; justify-content:center;
+  overflow:hidden;
   font-size:var(--fs);
+}
+.ytbpip-lines > *{ flex:0 0 auto; }
+
+/* 上下文行（上下各两句）：只比正常小一点点 + 压暗 + 单行截断 */
+.ytbpip-ghost{
+  font-size:.88em;
+  line-height:1.3;
+  color:var(--fg-2);
+  text-align:center;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.ytbpip-ghost:empty{ display:none; }
+
+.ytbpip-text{
+  /* 1em = .ytbpip-lines 的字号，三行共用同一个缩放比例 */
+  font-size:1em;
   font-weight:600;
   line-height:1.28;
   letter-spacing:.01em;
@@ -57,6 +77,7 @@ html, body {
   color:#fff;
   text-shadow:0 1px 2px rgba(0,0,0,.55);
   display:-webkit-box;
+  /* 具体几行由 ui-template 的 fitText() 实测后写成内联样式，这里只是首帧前的兜底 */
   -webkit-line-clamp:3;
   -webkit-box-orient:vertical;
   overflow:hidden;

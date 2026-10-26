@@ -12,7 +12,9 @@
     speed: 1, // 默认倍速
     autoEnableCC: true, // 打开小窗时自动开启 YouTube 字幕
     // 'track' = 接口取完整字幕轨道；'dom' = 抓取播放器当前渲染的字幕
-    captionSource: 'track'
+    captionSource: 'track',
+    // 'lyrics' = 歌词式三行（可滚轮翻看）；'subtitle' = 单行大字
+    displayMode: 'lyrics'
   };
 
   const FONT_MIN = 12;
@@ -41,7 +43,8 @@
       fontSize: clampFont(merged.fontSize),
       speed: clampSpeed(merged.speed),
       autoEnableCC: !!merged.autoEnableCC,
-      captionSource: merged.captionSource === 'dom' ? 'dom' : 'track'
+      captionSource: merged.captionSource === 'dom' ? 'dom' : 'track',
+      displayMode: merged.displayMode === 'subtitle' ? 'subtitle' : 'lyrics'
     };
   }
 

@@ -86,7 +86,7 @@
     P.post(P.EV_TO_ISOLATED, type, payload);
   }
 
-  async function openPip() {
+  async function openPip(opts) {
     diag.requests += 1;
     log('收到打开请求', { pending, hasApi: diag.api, existing: !!(host && host.isOpen()) });
     if (pending) return;
@@ -99,7 +99,7 @@
     try {
       host = await G.openPipWindow({
         width: WIDTH,
-        height: HEIGHT,
+        height: (opts && opts.height) || HEIGHT,
         initialState: lastState,
         onCommand(cmd, value) {
           post(T.CMD, { cmd, value });
@@ -169,7 +169,7 @@
   P.on(P.EV_TO_MAIN, (type, payload) => {
     switch (type) {
       case T.OPEN:
-        openPip();
+        openPip(payload);
         break;
       case T.CLOSE:
         closePip();

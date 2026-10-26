@@ -18,7 +18,14 @@
   const T = P.T;
 
   const PIP_WIDTH = 420;
-  const PIP_HEIGHT = 132;
+  const PIP_HEIGHT_SUBTITLE = 132;
+  // 歌词模式五行：190 才能在当前句占两行时仍保住 20px 字号，180 会逼着收起上下句
+  const PIP_HEIGHT_LYRICS = 190;
+
+  /** 歌词模式需要更多高度，否则五行会逼着字号一路缩小 */
+  function pipHeight() {
+    return S.settings.displayMode === 'lyrics' ? PIP_HEIGHT_LYRICS : PIP_HEIGHT_SUBTITLE;
+  }
 
   const log = (...args) => {
     try {
@@ -34,7 +41,8 @@
     bound: new WeakSet(),
     desired: 1,
     lastWrite: 0,
-    caption: { text: '', prev: '', ccOn: false },
+    // prev / next 是数组，按「离当前句由近到远」排列，最多 LYRIC_CONTEXT 条
+    caption: { text: '', prev: [], next: [], ccOn: false },
     tracker: null,
     pipRemote: false, // MAIN world 托管的 PiP 窗口
     floatWin: null,
@@ -53,7 +61,9 @@
       timer: 0,
       timeout: 0,
       retryTimer: 0 // pot 要等播放器拉过字幕，失败后延迟重试一次
-    }
+    },
+    // 歌词模式滚轮翻看：翻看时以 base 为锚点，不跟着播放进度漂移
+    lyric: { active: false, base: 0, offset: 0, timer: 0 }
   };
 
   let pipHost = null; // 本 world 直接托管的 PiP 窗口
@@ -250,11 +260,13 @@
     const ccOn = S.tracker ? S.tracker.getCcState() : S.caption.ccOn;
     return {
       text: S.caption.text || '',
-      prev: S.caption.prev || '',
+      prev: S.caption.prev,
+      next: S.caption.next,
       speed: Math.round(rate * 100) / 100,
       playing: !!(v && !v.paused && !v.ended),
       ccOn: !!ccOn,
-      fontSize: S.settings.fontSize
+      fontSize: S.settings.fontSize,
+      lyrics: S.settings.displayMode === 'lyrics'
     };
   }
 
@@ -281,7 +293,8 @@
           return;
         }
         S.caption.text = cap.text;
-        S.caption.prev = cap.prev;
+        S.caption.prev = cap.prev ? [cap.prev] : [];
+        S.caption.next = []; // DOM 只能拿到已渲染的行，没有「下一句」
         syncRender(false);
       });
     }
@@ -298,6 +311,8 @@
   const CUE_TICK_MS = 100;
   const TRACK_TIMEOUT_MS = 1500; // 等 MAIN world 回轨道地址的超时
   const CUE_RETRY_MS = 1800; // pot 要等播放器先拉过字幕，失败后延迟重试
+  const LYRIC_BROWSE_MS = 6000; // 歌词模式翻看后停多久自动回到播放位置
+  const LYRIC_CONTEXT = 2; // 歌词模式当前句上下各显示几句
   const CUE_LINGER_S = 3; // 句间空隙超过这个时长就清屏
 
   function currentVideoId() {
@@ -325,6 +340,7 @@
   /** 回退到 DOM 取词 */
   function useDomCaptions(reason) {
     clearTrackTimeout();
+    stopLyricBrowse(); // DOM 模式没有整段列表，翻看不可用
     S.cue.pending = false;
     const wasTrack = S.cue.mode === 'track';
     S.cue.mode = 'dom';
@@ -332,7 +348,8 @@
     stopCueDriver();
     if (wasTrack) {
       S.caption.text = '';
-      S.caption.prev = '';
+      S.caption.prev = [];
+      S.caption.next = [];
       syncRender(true);
     }
     log('改用 DOM 取词：' + reason);
@@ -352,9 +369,11 @@
       clearTimeout(S.cue.retryTimer);
       S.cue.retryTimer = 0;
     }
+    stopLyricBrowse();
     stopCueDriver();
     S.caption.text = '';
-    S.caption.prev = '';
+    S.caption.prev = [];
+    S.caption.next = [];
   }
 
   /** timedtext 地址只能由 MAIN world 提供（它才拦得到带 pot 的请求） */
@@ -401,6 +420,55 @@
     }, CUE_RETRY_MS);
   }
 
+  function sameList(a, b) {
+    if (!a || !b || a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (a[i] !== b[i]) return false;
+    }
+    return true;
+  }
+
+  /** 歌词模式滚轮翻看：delta = +1 向下（看后面的）/ -1 向上 */
+  function scrollLyrics(delta) {
+    if (!delta) return;
+    if (S.settings.displayMode !== 'lyrics') return;
+    const list = S.cue.list;
+    if (S.cue.mode !== 'track' || !list || !list.length) return;
+
+    if (!S.lyric.active) {
+      const auto = S.video && Number.isFinite(S.video.currentTime)
+        ? findCueIndex(list, S.video.currentTime)
+        : 0;
+      S.lyric.active = true;
+      S.lyric.base = auto < 0 ? 0 : auto;
+    }
+
+    const max = list.length - 1;
+    const limit = Math.max(-S.lyric.base, Math.min(max - S.lyric.base, S.lyric.offset + delta));
+    if (limit === S.lyric.offset) return; // 到头了
+    S.lyric.offset = limit;
+
+    if (S.lyric.timer) clearTimeout(S.lyric.timer);
+    S.lyric.timer = setTimeout(() => {
+      S.lyric.timer = 0;
+      S.lyric.active = false;
+      S.lyric.offset = 0;
+      updateFromCues();
+    }, LYRIC_BROWSE_MS);
+
+    updateFromCues();
+  }
+
+  /** 退出翻看状态并回到播放位置 */
+  function stopLyricBrowse() {
+    if (S.lyric.timer) {
+      clearTimeout(S.lyric.timer);
+      S.lyric.timer = 0;
+    }
+    S.lyric.active = false;
+    S.lyric.offset = 0;
+  }
+
   function findCueIndex(list, t) {
     let lo = 0;
     let hi = list.length - 1;
@@ -423,18 +491,32 @@
     const t = S.video.currentTime;
     if (!Number.isFinite(t)) return;
 
-    const idx = findCueIndex(list, t);
+    // 翻看中：以进入翻看时的位置为锚点，播放进度继续走也不影响你正在看的地方
+    const auto = findCueIndex(list, t);
+    const idx = S.lyric.active ? S.lyric.base + S.lyric.offset : auto;
     let text = '';
-    let prev = '';
-    // 句间小空隙保持上一句，避免闪烁；长空隙（超过 CUE_LINGER_S）清屏
-    if (idx >= 0 && t <= list[idx].end + CUE_LINGER_S) {
+    const prev = [];
+    const next = [];
+    // 句间小空隙保持上一句，避免闪烁；长空隙（超过 CUE_LINGER_S）清屏（翻看时不生效）
+    if (idx >= 0 && idx < list.length && (S.lyric.active || t <= list[idx].end + CUE_LINGER_S)) {
       text = list[idx].text;
-      if (idx > 0) prev = list[idx - 1].text;
+      // 上下文：由近到远各取 LYRIC_CONTEXT 句
+      for (let i = 1; i <= LYRIC_CONTEXT; i++) {
+        if (idx - i >= 0) prev.push(list[idx - i].text);
+        if (idx + i < list.length) next.push(list[idx + i].text);
+      }
     }
 
-    if (text === S.caption.text && prev === S.caption.prev) return;
+    if (
+      text === S.caption.text &&
+      sameList(prev, S.caption.prev) &&
+      sameList(next, S.caption.next)
+    ) {
+      return;
+    }
     S.caption.text = text;
     S.caption.prev = prev;
+    S.caption.next = next;
     syncRender(false);
   }
 
@@ -534,6 +616,7 @@
   function openFloat() {
     if (!S.floatWin) {
       S.floatWin = G.createFloatWindow({
+        height: pipHeight(),
         onCommand: handleCommand,
         onClose: () => {
           S.floatOn = false;
@@ -572,7 +655,7 @@
     try {
       const host = await G.openPipWindow({
         width: PIP_WIDTH,
-        height: PIP_HEIGHT,
+        height: pipHeight(),
         initialState: buildState(),
         onCommand: onPipCommand,
         onClosed: () => {
@@ -598,7 +681,7 @@
     const ok = await openLocalPip();
     if (ok) return;
     log('改由 MAIN world 请求 PiP');
-    P.post(P.EV_TO_MAIN, T.OPEN, {});
+    P.post(P.EV_TO_MAIN, T.OPEN, { height: pipHeight() });
   }
 
   /* ---------------- 指令 ---------------- */
@@ -646,6 +729,10 @@
 
       case CMD.TOGGLE_CC:
         toggleCc();
+        break;
+
+      case CMD.SCROLL:
+        scrollLyrics(typeof value === 'number' ? value : 0);
         break;
 
       case CMD.CLOSE_WINDOW:
@@ -807,6 +894,14 @@
           S.cue.attempts = 0;
           requestTrack(true);
         }
+      }
+
+      // 展示模式被切换：歌词模式的翻看状态只在歌词模式有意义
+      if (prev && prev.displayMode !== next.displayMode) {
+        stopLyricBrowse();
+        // PiP 窗口开出来后无法改尺寸，只能改浮动小窗；PiP 需重开才生效
+        if (S.floatOn && S.floatWin) S.floatWin.setHeight(pipHeight());
+        if (S.cue.mode === 'track') updateFromCues();
       }
 
       if (Math.abs(S.desired - next.speed) > 0.001) {

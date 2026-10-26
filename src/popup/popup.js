@@ -7,6 +7,9 @@
   const speedVal = document.getElementById('speedVal');
   const speedPills = document.getElementById('speedPills');
   const autoCc = document.getElementById('autoCc');
+  const modeVal = document.getElementById('modeVal');
+  const modePills = document.getElementById('modePills');
+  const modeHint = document.getElementById('modeHint');
   const sourceVal = document.getElementById('sourceVal');
   const sourcePills = document.getElementById('sourcePills');
   const sourceHint = document.getElementById('sourceHint');
@@ -16,6 +19,21 @@
   const DEFAULT_TIP = tip.textContent;
 
   const PILL_PRESETS = [0.5, 0.75, 1, 1.25, 1.5, 2];
+
+  const MODE_OPTIONS = [
+    {
+      value: 'lyrics',
+      short: '歌词',
+      label: '歌词',
+      hint: '上下各两句 + 当前句共五行，在小窗里滚轮可上下翻看整段字幕'
+    },
+    {
+      value: 'subtitle',
+      short: '字幕',
+      label: '字幕',
+      hint: '只显示当前一句，字号更大，跟普通字幕一样'
+    }
+  ];
 
   const SOURCE_OPTIONS = [
     {
@@ -73,6 +91,32 @@
         paintSpeed();
       });
       speedPills.appendChild(btn);
+    });
+  }
+
+  function paintMode() {
+    const active =
+      MODE_OPTIONS.filter((o) => o.value === current.displayMode)[0] || MODE_OPTIONS[0];
+    modeVal.textContent = active.short;
+    modeHint.textContent = active.hint;
+    Array.prototype.forEach.call(modePills.children, (btn) => {
+      btn.classList.toggle('is-on', btn.dataset.mode === active.value);
+    });
+  }
+
+  function buildModePills() {
+    modePills.textContent = '';
+    MODE_OPTIONS.forEach((opt) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'pill';
+      btn.dataset.mode = opt.value;
+      btn.textContent = opt.label;
+      btn.addEventListener('click', async () => {
+        current = await ST.save({ displayMode: opt.value });
+        paintMode();
+      });
+      modePills.appendChild(btn);
     });
   }
 
@@ -174,9 +218,11 @@
       /* 读取失败时沿用默认值 */
     }
     buildPills();
+    buildModePills();
     buildSourcePills();
     paintFont();
     paintSpeed();
+    paintMode();
     paintSource();
     autoCc.checked = !!current.autoEnableCC;
   }

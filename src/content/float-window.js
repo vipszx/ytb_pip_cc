@@ -9,11 +9,12 @@
   const HEIGHT = 132;
 
   /**
-   * @param {{onCommand:(cmd:string, value?:number)=>void, onClose:()=>void}} options
+   * @param {{onCommand:(cmd:string, value?:number)=>void, onClose:()=>void, height?:number}} options
    */
   G.createFloatWindow = function createFloatWindow(options) {
     const onCommand = (options && options.onCommand) || function () {};
     const onClose = (options && options.onClose) || function () {};
+    const height = (options && options.height) || HEIGHT;
 
     const existing = document.getElementById(G.selectors.FLOAT_HOST_ID);
     if (existing) existing.remove();
@@ -25,7 +26,7 @@
       'right:24px',
       'bottom:96px',
       'width:' + WIDTH + 'px',
-      'height:' + HEIGHT + 'px',
+      'height:' + height + 'px',
       'z-index:2147483000',
       'display:none',
       'border-radius:10px',
@@ -98,6 +99,10 @@
       ui,
       open,
       close,
+      /** 切换显示模式后改变高度（浮动小窗是普通 DOM，可以直接改） */
+      setHeight(h) {
+        if (h > 0) host.style.height = h + 'px';
+      },
       isVisible() {
         return host.style.display !== 'none';
       },
