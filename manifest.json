@@ -21,6 +21,8 @@
         "src/ui/ui-template.js",
         "src/ui/pip-host.js",
         "src/content/caption-tracker.js",
+        "src/content/track-source.js",
+        "src/content/track-cues.js",
         "src/content/float-window.js",
         "src/content/content-isolated.js"
       ],
@@ -36,7 +38,7 @@
         "src/ui/pip-host.js",
         "src/content/content-main.js"
       ],
-      "run_at": "document_idle",
+      "run_at": "document_start",
       "all_frames": false,
       "world": "MAIN"
     }

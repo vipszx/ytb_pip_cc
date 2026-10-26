@@ -17,8 +17,17 @@
   const G = (window.__YTBPIP__ = window.__YTBPIP__ || {});
   if (G.createCaptionTracker) return;
 
-  /** 'mirror' = 跟随官方节奏；'sentence' = 整句上屏 */
-  const MODE = 'mirror';
+  /**
+   * 'mirror' = 跟随官方节奏；'sentence' = 整句上屏。
+   *
+   * 默认用 'sentence'：自动字幕是逐词增长的，mirror 会把每个词的变化都写到小窗
+   * 上（小窗里就是「一个字一个字蹦」）。整句模式会攒到句末标点（160ms）或流式
+   * 稳定（700ms）才整句替换，最长 2600ms 兜底，显示上明显更稳。
+   *
+   * 完整字幕轨道（timedtext / get_transcript）优先于本模块；轨道拿不到时才走这里——
+   * YouTube 对 api/timedtext 加了 pot 校验，裸 baseUrl 一律返回 200 + 空 body。
+   */
+  const MODE = 'sentence';
 
   const MERGE_MS = 40; // mutation 合并窗口
   const SAFETY_MS = 300; // 兜底轮询

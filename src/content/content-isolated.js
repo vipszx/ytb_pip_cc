@@ -42,7 +42,19 @@
     active: false,
     stick: false, // 是否把小窗设定的倍速钉住（关闭小窗后仍生效）
     lastKey: '',
-    pollId: 0
+    pollId: 0,
+    // 完整字幕轨道（优先通道）；失败则退回 DOM 取词
+    cue: {
+      list: null, // [{start,end,text}] 秒
+      mode: 'dom', // 'track' = 轨道驱动，'dom' = DOM 取词
+      videoId: '', // 当前 cue 属于哪个视频
+      requested: '', // 已发起请求的 videoId
+      pending: false,
+      attempts: 0, // 同一视频的请求次数（超时重试用）
+      timer: 0,
+      timeout: 0,
+      retryTimer: 0 // pot 要等播放器拉过字幕，失败后延迟重试一次
+    }
   };
 
   let pipHost = null; // 本 world 直接托管的 PiP 窗口
@@ -140,6 +152,11 @@
 
     v.addEventListener('seeking', () => {
       if (S.active && S.tracker) S.tracker.reset();
+      if (S.cue.mode === 'track') updateFromCues();
+    });
+
+    v.addEventListener('emptied', () => {
+      if (S.active) resetTrackForNewVideo();
     });
   }
 
@@ -258,17 +275,309 @@
   function startTracking() {
     if (!S.tracker) {
       S.tracker = G.createCaptionTracker((cap) => {
+        S.caption.ccOn = cap.ccOn;
+        // 轨道模式由 cue 驱动文本，DOM 取词只用来同步 CC 状态
+        if (S.cue.mode === 'track') {
+          syncRender(false);
+          return;
+        }
         S.caption.text = cap.text;
         S.caption.prev = cap.prev;
-        S.caption.ccOn = cap.ccOn;
         syncRender(false);
       });
     }
     S.tracker.start();
+    if (S.cue.mode === 'track') startCueDriver();
   }
 
   function stopTracking() {
     if (S.tracker) S.tracker.stop();
+  }
+
+  /* ---------------- 完整字幕轨道（优先通道） ---------------- */
+
+  const CUE_TICK_MS = 100;
+  const TRACK_TIMEOUT_MS = 1500;
+  const TRACK_POLL_MS = 200; // 等待轨道信息时轮询 DOM 通道的间隔
+  const CUE_LINGER_S = 3; // 句间空隙超过这个时长就清屏
+
+  function currentVideoId() {
+    try {
+      return new URLSearchParams(location.search).get('v') || '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function stopCueDriver() {
+    if (S.cue.timer) {
+      clearInterval(S.cue.timer);
+      S.cue.timer = 0;
+    }
+  }
+
+  function clearTrackTimeout() {
+    if (S.cue.timeout) {
+      clearTimeout(S.cue.timeout);
+      clearInterval(S.cue.timeout);
+      S.cue.timeout = 0;
+    }
+  }
+
+  /** 回退到 DOM 取词 */
+  function useDomCaptions(reason) {
+    clearTrackTimeout();
+    S.cue.pending = false;
+    const wasTrack = S.cue.mode === 'track';
+    S.cue.mode = 'dom';
+    S.cue.list = null;
+    stopCueDriver();
+    if (wasTrack) {
+      S.caption.text = '';
+      S.caption.prev = '';
+      syncRender(true);
+    }
+    log('改用 DOM 取词：' + reason);
+  }
+
+  /** 切换视频时清空轨道缓存 */
+  function resetTrackForNewVideo() {
+    const vid = currentVideoId();
+    if (vid && vid === S.cue.videoId && S.cue.mode === 'track') return;
+    clearTrackTimeout();
+    S.cue.pending = false;
+    S.cue.mode = 'dom';
+    S.cue.list = null;
+    S.cue.videoId = '';
+    S.cue.requested = '';
+    S.cue.attempts = 0;
+    if (S.cue.retryTimer) {
+      clearTimeout(S.cue.retryTimer);
+      S.cue.retryTimer = 0;
+    }
+    stopCueDriver();
+    S.caption.text = '';
+    S.caption.prev = '';
+  }
+
+  /** MAIN world 写在 documentElement 上的轨道信息（不依赖跨 world 事件） */
+  function readTrackFromDom() {
+    try {
+      const raw = document.documentElement.getAttribute('data-ytbpip-track');
+      if (!raw) return null;
+      const info = JSON.parse(raw);
+      if (!info || !info.baseUrl) return null;
+      const vid = currentVideoId();
+      if (info.videoId && vid && info.videoId !== vid) return null;
+      return info;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function mainWorldAlive() {
+    try {
+      return document.documentElement.hasAttribute('data-ytbpip-main');
+    } catch (e) {
+      return false;
+    }
+  }
+
+  async function requestTrack(force) {
+    if (!G.loadTrackCues) return;
+    const vid = currentVideoId();
+    if (!vid || S.cue.pending) return;
+    if (!force && S.cue.mode === 'track' && S.cue.videoId === vid) return;
+
+    // 1) MAIN world 写在 DOM 上的缓存（若 MAIN world 存在）
+    const cached = readTrackFromDom();
+    if (cached) {
+      S.cue.requested = vid;
+      S.cue.attempts = 0;
+      onTrackInfo(cached);
+      return;
+    }
+
+    S.cue.pending = true;
+    S.cue.requested = vid;
+    S.cue.attempts += 1;
+    clearTrackTimeout();
+
+    // 2) 同时打一发跨 world 请求：MAIN world 若可用会更快返回
+    P.post(P.EV_TO_MAIN, T.TRACK_REQ, { videoId: vid });
+
+    // 3) 隔离世界自救：内联 playerResponse / InnerTube
+    let local = null;
+    try {
+      local = G.resolveTrackSource ? await G.resolveTrackSource(vid) : null;
+    } catch (e) {
+      local = null;
+    }
+
+    if (!S.cue.pending) return; // 事件通道已经先到
+    if (local && local.baseUrl) {
+      log('从页面数据解析到字幕轨道', {
+        from: local.from,
+        lang: local.languageCode,
+        kind: local.kind
+      });
+      onTrackInfo(local);
+      return;
+    }
+
+    // 4) 都没有：再等一小会儿跨 world 的响应（DOM 通道可能稍后才被写）
+    const startedAt = Date.now();
+    S.cue.timeout = setInterval(() => {
+      if (!S.cue.pending) {
+        clearTrackTimeout();
+        return;
+      }
+
+      const late = readTrackFromDom();
+      if (late) {
+        clearTrackTimeout();
+        log('改用 DOM 通道取轨道');
+        onTrackInfo(late);
+        return;
+      }
+
+      if (Date.now() - startedAt < TRACK_TIMEOUT_MS) return;
+
+      clearTrackTimeout();
+      S.cue.pending = false;
+
+      if (S.cue.attempts < 2 && S.active) {
+        log('轨道请求超时，重试', { mainWorld: mainWorldAlive() });
+        requestTrack(true);
+        return;
+      }
+      useDomCaptions('未找到字幕轨道（页面数据与 MAIN world 均无结果）');
+    }, TRACK_POLL_MS);
+  }
+
+  function findCueIndex(list, t) {
+    let lo = 0;
+    let hi = list.length - 1;
+    let ans = -1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (list[mid].start <= t) {
+        ans = mid;
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    return ans;
+  }
+
+  function updateFromCues() {
+    const list = S.cue.list;
+    if (!list || !list.length || !S.video) return;
+    const t = S.video.currentTime;
+    if (!Number.isFinite(t)) return;
+
+    const idx = findCueIndex(list, t);
+    let text = '';
+    let prev = '';
+    // 句间小空隙保持上一句，避免闪烁；长空隙（超过 CUE_LINGER_S）清屏
+    if (idx >= 0 && t <= list[idx].end + CUE_LINGER_S) {
+      text = list[idx].text;
+      if (idx > 0) prev = list[idx - 1].text;
+    }
+
+    if (text === S.caption.text && prev === S.caption.prev) return;
+    S.caption.text = text;
+    S.caption.prev = prev;
+    syncRender(false);
+  }
+
+  function startCueDriver() {
+    stopCueDriver();
+    S.cue.timer = setInterval(updateFromCues, CUE_TICK_MS);
+    updateFromCues();
+  }
+
+  async function onTrackInfo(info) {
+    clearTrackTimeout();
+    S.cue.pending = false;
+
+    // 小窗已关：不建立驱动，下次激活时重新请求
+    if (!S.active) {
+      S.cue.mode = 'dom';
+      S.cue.list = null;
+      stopCueDriver();
+      return;
+    }
+    if (!info) {
+      useDomCaptions('轨道信息为空');
+      return;
+    }
+    const vid = currentVideoId();
+    if (info.videoId && vid && info.videoId !== vid) {
+      log('轨道信息已过期，忽略');
+      return;
+    }
+
+    // MAIN world 直接给整段 cue 时，无需再走 timedtext
+    if (info.cues && info.cues.length) {
+      applyCues(info.cues, vid, info.videoId || vid, info.source || 'transcript');
+      return;
+    }
+
+    if (!info.baseUrl) {
+      useDomCaptions('该视频没有字幕轨道');
+      return;
+    }
+    if (!G.loadTrackCues) {
+      useDomCaptions('缺少轨道解析模块');
+      return;
+    }
+
+    try {
+      const cues = await G.loadTrackCues(info.baseUrl, info.tlang, info.videoId || vid);
+      if (cues && cues.length) {
+        applyCues(cues, vid, info.videoId || vid, 'timedtext');
+        return;
+      }
+    } catch (err) {
+      log('timedtext 取字幕失败，继续尝试其它来源：', (err && err.message) || err);
+    }
+
+    // 转写接口：用页面真实的 INNERTUBE_CONTEXT + getTranscriptEndpoint.params
+    if (G.loadTranscriptCues) {
+      try {
+        const cues = await G.loadTranscriptCues(info.videoId || vid);
+        if (cues && cues.length) {
+          applyCues(cues, vid, info.videoId || vid, 'transcript');
+          return;
+        }
+        log('转写接口也没有返回字幕');
+      } catch (err) {
+        log('转写接口失败：', (err && err.message) || err);
+      }
+    }
+    // pot 只有在播放器自己拉过字幕后才会出现在资源计时里，稍等再试一次
+    if (!S.cue.retryTimer) {
+      S.cue.retryTimer = setTimeout(() => {
+        S.cue.retryTimer = 0;
+        if (!S.active || S.cue.mode === 'track') return;
+        if (currentVideoId() !== vid) return;
+        log('重试取轨道（等播放器拉过字幕）');
+        onTrackInfo(info);
+      }, 1800);
+    }
+    useDomCaptions('所有轨道来源都拿不到字幕');
+  }
+
+  /** 把 cue 列表接到渲染管线 */
+  function applyCues(cues, currentId, cueVideoId, source) {
+    if (currentId && currentVideoId() !== currentId) return; // 期间已切视频
+    S.cue.list = cues;
+    S.cue.videoId = cueVideoId;
+    S.cue.mode = 'track';
+    startCueDriver();
+    log('已启用完整字幕轨道', { from: source, count: cues.length });
   }
 
   /* ---------------- 生命周期 ---------------- */
@@ -277,6 +586,7 @@
     S.active = true;
     ensureVideo();
     startTracking();
+    requestTrack(false);
     syncRender(true);
     setTimeout(applyPreferredSpeed, 80);
     setTimeout(ensureCcEnabled, 520);
@@ -286,6 +596,7 @@
     if (isPipOpen() || S.floatOn) return;
     S.active = false;
     stopTracking();
+    stopCueDriver();
     applyClosePolicy();
   }
 
@@ -495,12 +806,14 @@
 
   function onNavigate() {
     S.lastKey = '';
+    resetTrackForNewVideo();
     setTimeout(() => {
       ensureVideo();
       ensureEntryButton();
       if (S.tracker) S.tracker.retarget();
       if (S.active) {
         applyPreferredSpeed();
+        requestTrack(false);
         syncRender(true);
       }
     }, 350);
@@ -529,6 +842,9 @@
           break;
         case T.CMD:
           handleCommand(payload && payload.cmd, payload && payload.value);
+          break;
+        case T.TRACK_RES:
+          onTrackInfo(payload);
           break;
         default:
           break;

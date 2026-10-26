@@ -24,7 +24,9 @@
       OPENED: 'opened', // MAIN -> isolated 窗口已就绪
       CLOSED: 'closed', // MAIN -> isolated 窗口已关闭
       OPEN_FAILED: 'openFailed', // MAIN -> isolated 打开失败，需降级
-      CMD: 'cmd' // MAIN -> isolated 用户指令
+      CMD: 'cmd', // MAIN -> isolated 用户指令
+      TRACK_REQ: 'trackReq', // isolated -> MAIN 请求完整字幕轨道信息
+      TRACK_RES: 'trackRes' // MAIN -> isolated 轨道信息
     },
 
     /** 用户指令 */
