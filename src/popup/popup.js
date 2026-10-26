@@ -7,12 +7,30 @@
   const speedVal = document.getElementById('speedVal');
   const speedPills = document.getElementById('speedPills');
   const autoCc = document.getElementById('autoCc');
+  const sourceVal = document.getElementById('sourceVal');
+  const sourcePills = document.getElementById('sourcePills');
+  const sourceHint = document.getElementById('sourceHint');
   const openBtn = document.getElementById('openBtn');
   const closeBtn = document.getElementById('closeBtn');
   const tip = document.getElementById('tip');
   const DEFAULT_TIP = tip.textContent;
 
-  const PILL_PRESETS = [0.75, 1, 1.25, 1.5, 2];
+  const PILL_PRESETS = [0.5, 0.75, 1, 1.25, 1.5, 2];
+
+  const SOURCE_OPTIONS = [
+    {
+      value: 'track',
+      short: '接口',
+      label: '接口 · 整段轨道',
+      hint: '一次取回完整字幕，时间轴精确、一句一句显示（推荐）'
+    },
+    {
+      value: 'dom',
+      short: 'DOM',
+      label: 'DOM · 播放器渲染',
+      hint: '直接读播放器当前渲染的字幕，兼容性最好，但只能看到当前行'
+    }
+  ];
 
   let current = Object.assign({}, ST.DEFAULTS);
 
@@ -55,6 +73,31 @@
         paintSpeed();
       });
       speedPills.appendChild(btn);
+    });
+  }
+
+  function paintSource() {
+    const active = SOURCE_OPTIONS.filter((o) => o.value === current.captionSource)[0] || SOURCE_OPTIONS[0];
+    sourceVal.textContent = active.short;
+    sourceHint.textContent = active.hint;
+    Array.prototype.forEach.call(sourcePills.children, (btn) => {
+      btn.classList.toggle('is-on', btn.dataset.source === active.value);
+    });
+  }
+
+  function buildSourcePills() {
+    sourcePills.textContent = '';
+    SOURCE_OPTIONS.forEach((opt) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'pill';
+      btn.dataset.source = opt.value;
+      btn.textContent = opt.label;
+      btn.addEventListener('click', async () => {
+        current = await ST.save({ captionSource: opt.value });
+        paintSource();
+      });
+      sourcePills.appendChild(btn);
     });
   }
 
@@ -131,8 +174,10 @@
       /* 读取失败时沿用默认值 */
     }
     buildPills();
+    buildSourcePills();
     paintFont();
     paintSpeed();
+    paintSource();
     autoCc.checked = !!current.autoEnableCC;
   }
 

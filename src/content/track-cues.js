@@ -7,15 +7,18 @@
  *  - YouTube 关掉 CC 也照样能显示
  *
  * json3 对自动生成字幕会给出很细的片段（接近逐词），这里按「间隔 + 句末标点」
- * 合并成整句，避免小窗里一个字一个字蹦。
+ * 合并成整句，避免小窗里一个字一个字蹦 —— 但每次只上屏一句：句末标点必断，
+ * 攒够长度后遇到句中标点也断，整段没有标点时最多攒 MAX_LINE_LEN 个字符。
  */
 (() => {
   const G = (window.__YTBPIP__ = window.__YTBPIP__ || {});
   if (G.loadTrackCues) return;
 
   const MERGE_GAP_MS = 600; // 相邻片段间隔小于此值视为同一句
-  const MAX_LINE_LEN = 120; // 单行上限，超长就断开
+  const MAX_LINE_LEN = 60; // 一句的字符上限，超了就断开（整段没标点时的兜底）
+  const CLAUSE_BREAK_LEN = 30; // 攒到这个长度后，遇到句中标点就断开
   const SENTENCE_END_RE = /[。．.!！?？…]["'”’）)]*$/;
+  const CLAUSE_END_RE = /[，,、；;：:]["'”’）)]*$/;
 
   const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
 
@@ -53,10 +56,15 @@
       const cur = raw[i];
       const last = lines[lines.length - 1];
       const gapMs = last ? (cur.start - last.end) * 1000 : Infinity;
+      // 断开的四种情况：间隔太久 / 已经到句末 / 攒够长度遇到句中标点 / 超过字符上限
+      // last 在第一个片段时是 undefined，所有取值都必须先挡住
+      const clauseBreak =
+        !!last && last.text.length >= CLAUSE_BREAK_LEN && CLAUSE_END_RE.test(last.text);
       const joinable =
         !!last &&
         gapMs < MERGE_GAP_MS &&
         !SENTENCE_END_RE.test(last.text) &&
+        !clauseBreak &&
         last.text.length < MAX_LINE_LEN;
 
       if (joinable) {
@@ -133,29 +141,15 @@
   }
 
   /**
-   * @param {string} baseUrl 轨道 baseUrl
+   * @param {string} baseUrl 拦截器拿到的 timedtext 地址（必须自带 pot，否则只会返回空响应）
    * @param {string} tlang 自动翻译目标语言（可选）
-   * @param {string} videoId 当前视频 id，用于复用播放器请求里的 pot
    * @returns {Promise<Array<{start:number,end:number,text:string}>>}
    */
-  G.loadTrackCues = async function loadTrackCues(baseUrl, tlang, videoId) {
+  G.loadTrackCues = async function loadTrackCues(baseUrl, tlang) {
     if (!baseUrl) throw new Error('no-track-url');
 
-    const candidates = G.buildTimedTextUrls ? G.buildTimedTextUrls(baseUrl, videoId) : [];
-    if (!candidates.length) candidates.push(baseUrl);
-
-    let lastErr = '';
-    for (let i = 0; i < candidates.length; i++) {
-      let url;
-      try {
-        url = toJson3Url(candidates[i], tlang);
-      } catch (e) {
-        continue;
-      }
-      const r = await attempt(url);
-      if (r.cues) return r.cues;
-      lastErr = r.err;
-    }
-    throw new Error(lastErr || 'no-track-url');
+    const r = await attempt(toJson3Url(baseUrl, tlang));
+    if (r.cues) return r.cues;
+    throw new Error(r.err || 'no-track-url');
   };
 })();

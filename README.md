@@ -6,11 +6,11 @@
 
 | 能力 | 说明 |
 | --- | --- |
-| 字幕画中画 | 使用 Chrome 的 Document Picture-in-Picture API 弹出独立小窗（默认 420×132），只显示字幕，最多两行，自动换行，切换回原标签页也不会被关闭 |
+| 字幕画中画 | 使用 Chrome 的 Document Picture-in-Picture API 弹出独立小窗（默认 420×132），只显示字幕，最多三行、放不下自动缩字号，切换回原标签页也不会被关闭 |
 | 置顶最前 | PiP 窗口天然位于所有普通窗口之上，可拖到屏幕任意角落，一边看别的软件一边看字幕 |
 | 倍速控制 | 小窗内 `−` / `+` 按 0.25 步进，点击倍速数值循环 0.5→0.75→1→1.25→1.5→1.75→2，直接作用于页面 `<video>`，与画面完全同步 |
 | 字号控制 | `A−` / `A+` 按 2px 步进（12–40px），跨视频、跨会话记忆 |
-| 字幕来源 | 优先下载视频的**完整字幕轨道**（timedtext/json3），按「间隔 + 句末标点」合并成整句，时间轴精确、按播放进度同步；轨道拿不到时自动回退到抓取播放器渲染的字幕（整句上屏）。**支持自动翻译/任意语言**，并保留上一句作弱化提示 |
+| 字幕来源 | 默认下载视频的**完整字幕轨道**（timedtext/json3），按「间隔 + 句末标点」合并，**一次只显示一句**，时间轴精确、按播放进度同步；可在 popup 里**手动切换成 DOM 模式**（抓取播放器渲染的字幕，兼容性最好）。接口模式拿不到轨道时自动回退到 DOM。**支持自动翻译/任意语言** |
 | 点击复制 | 点击字幕文字即可复制当前句，屏幕中央提示「已复制」 |
 | 播放控制 | 小窗内播放/暂停；`CC` 按钮可直接开关 YouTube 字幕 |
 | 自动开字幕 | 打开小窗时若字幕未开启，自动点击 YouTube 的 CC 按钮（可在 popup 中关闭） |
@@ -23,14 +23,25 @@
 3. 点击「加载已解压的扩展程序」，选择本目录 `ytb_pip_cc`
 4. 需要 **Chrome 116 及以上**（Document Picture-in-Picture API）
 
-> 扩展没有声明图标，列表中会显示默认拼图图标，不影响功能。
+> 图标在 `icons/`（16/32/48/128 PNG）。想改样式可运行 `python tools/make_icons.py` 重新生成（需要 Pillow）。
 
 ## 使用
 
 1. 打开任意 YouTube 视频
 2. 在播放器**右下角控制栏**找到字幕小窗图标（在设置齿轮左侧），点击即弹出置顶字幕小窗
 3. 再次点击同一图标，或点小窗里的 `✕`，即可关闭
-4. 点击浏览器工具栏的扩展图标可以调整默认字号、默认倍速、是否自动开字幕，也可以从这里尝试打开/关闭小窗
+4. 点击浏览器工具栏的扩展图标可以调整默认字号、默认倍速、**字幕来源**（接口 / DOM）、是否自动开字幕，也可以从这里尝试打开/关闭小窗
+
+### 字幕来源：接口模式 vs DOM 模式
+
+| | 接口模式（默认） | DOM 模式 |
+| --- | --- | --- |
+| 取数方式 | 复用播放器自己的 `timedtext` 请求（带 `pot`）取整段轨道 | 读播放器当前渲染的字幕行 |
+| 显示 | 整段到手，**一句一句**按时间轴显示 | 跟着 YouTube 官方节奏走 |
+| 前提 | 字幕要在页面上显示过一次（会自动开 CC） | 只要页面有字幕即可 |
+| 适用 | 推荐；抖动最小 | 接口被 YouTube 限制时的保底方案 |
+
+切换后立即生效，不用重开小窗。
 
 ### 小窗工具条
 
@@ -59,19 +70,20 @@
 点小窗里的 `CC` 按钮，或在 YouTube 播放器上手动开字幕。部分视频没有字幕轨道。
 
 **小窗太小/想更小？**
-拖动 PiP 窗口边缘即可缩放，布局会按比例自适应；也可以用 `A−` 缩小字号让两行更紧凑。
+拖动 PiP 窗口边缘即可缩放，布局会按比例自适应；也可以用 `A−` 缩小字号让排版更紧凑。
 
 ## 目录结构
 
 ```
 manifest.json                 MV3 清单（两条内容脚本：isolated + MAIN world）
+icons/                        扩展图标（16/32/48/128）
+tools/make_icons.py           图标生成脚本（Pillow 绘制，扁平几何风格）
 src/shared/protocol.js        跨 world 事件协议（唯一契约）
 src/shared/selectors.js       YouTube DOM 选择器集中管理
 src/shared/settings.js        设置仓库（chrome.storage.local）
 src/content/content-isolated.js  采集层：入口按钮、字幕、倍速接管、设置、降级判定
 src/content/content-main.js      呈现层宿主：开 PiP 窗口、渲染 UI
 src/content/caption-tracker.js   字幕抓取器（DOM 兜底）
-src/content/track-source.js      轨道来源解析（内联 playerResponse / InnerTube）
 src/content/track-cues.js        完整字幕轨道下载与解析（优先通道）
 src/content/float-window.js      页面内浮动小窗（降级形态）
 src/ui/ui-styles.js           样式常量（PiP 与浮动小窗共用）
@@ -100,13 +112,13 @@ YouTube DOM ──> isolated world（字幕/倍速/设置）──requestWindow�
 
 YouTube 对 `captionTracks[].baseUrl` 加了门禁：直接请求（哪怕带 `&fmt=json3`、同源、带 cookie）一律返回 **HTTP 200 + 零字节 body**。播放器自己会额外带上 `pot`/`potc`（proof-of-origin token）等参数，我们无法自行签发。
 
-做法是复用播放器的请求：MAIN world 在 `document_start` 时包装 `window.fetch` 与 `XMLHttpRequest.prototype.open`，记下播放器自己发出的 `/api/timedtext` 地址（含 `pot`），隔离世界再用这些地址取整轨。顺序见 `track-source.js` 的 `buildTimedTextUrls()`：
+做法是复用播放器的请求：MAIN world 在 `document_start` 时包装 `window.fetch` 与 `XMLHttpRequest.prototype.open`，记下播放器自己发出的 `/api/timedtext` 地址（含 `pot`）。整条链路只有三步：
 
-1. 整体复用拦截到的地址（同一视频、同一语言）
-2. 把 `pot`/`potc`/`c`/`cver`/`xorb`… 抄到 `baseUrl` 上
-3. 裸 `baseUrl`（万一放开限制）
+1. isolated world 发 `TRACK_REQ` 向 MAIN world 索取地址
+2. MAIN world 回一条**属于当前视频**（匹配 `v=<videoId>`）的拦截地址
+3. isolated world 把它统一成 `fmt=json3` 后拉取、解析成时间轴（`track-cues.js`）
 
-**因此字幕要先在页面上显示过一次**，`pot` 才会存在——这就是「自动开字幕」（`autoEnableCC`）的意义。整轨到手后不再有「一个字一个字蹦」的问题。拿不到时回退到 DOM 取词，此时用整句上屏（`caption-tracker.js` 的 `MODE = 'sentence'`）来抑制抖动。
+**因此字幕要先在页面上显示过一次**，`pot` 才会存在——这就是「自动开字幕」（`autoEnableCC`）的意义。首次没拿到时会延迟 1.8 秒再问一次，等播放器把字幕拉出来。整轨到手后不再有「一个字一个字蹦」的问题。拿不到时回退到 DOM 取词，此时用整句上屏（`caption-tracker.js` 的 `MODE = 'sentence'`）来抑制抖动。
 
 ## 排障
 

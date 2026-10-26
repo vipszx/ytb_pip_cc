@@ -21,22 +21,26 @@
    * 'mirror' = 跟随官方节奏；'sentence' = 整句上屏。
    *
    * 默认用 'sentence'：自动字幕是逐词增长的，mirror 会把每个词的变化都写到小窗
-   * 上（小窗里就是「一个字一个字蹦」）。整句模式会攒到句末标点（160ms）或流式
-   * 稳定（700ms）才整句替换，最长 2600ms 兜底，显示上明显更稳。
+   * 上（小窗里就是「一个字一个字蹦」）。整句模式会攒到句末标点（110ms）或流式
+   * 稳定（300ms）才整句替换，最长 1500ms 兜底；延时与抖动在这里取舍，
+   * 具体数值见下面的 SETTLE_* 常量。
    *
    * 完整字幕轨道（timedtext / get_transcript）优先于本模块；轨道拿不到时才走这里——
    * YouTube 对 api/timedtext 加了 pot 校验，裸 baseUrl 一律返回 200 + 空 body。
    */
   const MODE = 'sentence';
 
-  const MERGE_MS = 40; // mutation 合并窗口
-  const SAFETY_MS = 300; // 兜底轮询
+  const MERGE_MS = 25; // mutation 合并窗口
+  const SAFETY_MS = 200; // 兜底轮询
   const MIRROR_MIN_INTERVAL_MS = 90; // 镜像模式最小写屏间隔
 
-  const SETTLE_FIRST_MS = 260;
-  const SETTLE_STREAM_MS = 700;
-  const SENTENCE_END_DELAY_MS = 160;
-  const MAX_HOLD_MS = 2600;
+  // 整句模式的防抖时长：越大越稳、越小越跟手。
+  // 自动字幕是逐词增长的，流式防抖太短会把每个词都写上去（小窗里「一字一蹦」），
+  // 太长则整句迟迟不上屏。当前值偏向「跟手」，想更稳就调大 SETTLE_STREAM_MS。
+  const SETTLE_FIRST_MS = 170; // 新句第一次出现
+  const SETTLE_STREAM_MS = 300; // 同一句继续增长（每来一个词都会重置这个计时）
+  const SENTENCE_END_DELAY_MS = 110; // 已到句末标点，没必要再等
+  const MAX_HOLD_MS = 1500; // 兜底：一直增长也要上屏
   const SENTENCE_END_RE = /[。．.!！?？…；;：:]\s*$/;
 
   const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();

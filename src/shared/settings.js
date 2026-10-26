@@ -10,7 +10,9 @@
   const DEFAULTS = {
     fontSize: 20, // 字幕字号 px
     speed: 1, // 默认倍速
-    autoEnableCC: true // 打开小窗时自动开启 YouTube 字幕
+    autoEnableCC: true, // 打开小窗时自动开启 YouTube 字幕
+    // 'track' = 接口取完整字幕轨道；'dom' = 抓取播放器当前渲染的字幕
+    captionSource: 'track'
   };
 
   const FONT_MIN = 12;
@@ -38,7 +40,8 @@
     return {
       fontSize: clampFont(merged.fontSize),
       speed: clampSpeed(merged.speed),
-      autoEnableCC: !!merged.autoEnableCC
+      autoEnableCC: !!merged.autoEnableCC,
+      captionSource: merged.captionSource === 'dom' ? 'dom' : 'track'
     };
   }
 

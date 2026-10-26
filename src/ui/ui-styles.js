@@ -10,8 +10,6 @@
 :root{
   --fs: 20px;
   --fg-0:#FFFFFF; --fg-1:#C7C7D1; --fg-2:#8A8A99;
-  --pri-0:#22D3EE; --pri-1:#8B5CF6; --pri-2:#6366F1;
-  --ok:#34D399; --bad:#F87171;
 }
 html, body {
   margin:0; height:100%; background:#2A2A2E; overflow:hidden;
@@ -49,8 +47,8 @@ html, body {
 .ytbpip-text{
   flex:0 1 auto;
   min-height:0;
-  /* 预算：窗口高度 - 顶条/工具条/内边距 - 上一句行高，保证两行始终放得下不出现裁切 */
-  font-size:min(var(--fs), calc((100vh - 40px) / 2.56));
+  /* 字号默认用用户设定值，放不下时由 ui-template 的 fitText() 按实际文字缩到 3 行内 */
+  font-size:var(--fs);
   font-weight:600;
   line-height:1.28;
   letter-spacing:.01em;
@@ -59,7 +57,7 @@ html, body {
   color:#fff;
   text-shadow:0 1px 2px rgba(0,0,0,.55);
   display:-webkit-box;
-  -webkit-line-clamp:2;
+  -webkit-line-clamp:3;
   -webkit-box-orient:vertical;
   overflow:hidden;
   overflow-wrap:anywhere;
@@ -140,11 +138,12 @@ html, body {
 }
 .ytbpip-btn:hover{ background:rgba(255,255,255,.08); color:#fff; }
 .ytbpip-btn:active{ transform:scale(.93); }
-.ytbpip-btn:focus-visible{ outline:1px solid var(--pri-0); outline-offset:1px; }
+.ytbpip-btn:focus-visible{ outline:1px solid rgba(255,255,255,.55); outline-offset:1px; }
 .ytbpip-btn svg{ width:12px; height:12px; display:block; fill:currentColor; }
 
-.ytbpip-btn.is-on{ color:var(--pri-0); background:rgba(34,211,238,.13); }
-.ytbpip-btn.is-on:hover{ background:rgba(34,211,238,.22); color:var(--pri-0); }
+/* 选中态用中性的「更亮的底 + 白字」，不引入彩色 */
+.ytbpip-btn.is-on{ color:#fff; background:rgba(255,255,255,.16); }
+.ytbpip-btn.is-on:hover{ background:rgba(255,255,255,.26); color:#fff; }
 
 .ytbpip-btn.is-speed{ min-width:40px; color:#fff; letter-spacing:.02em; }
 .ytbpip-btn.is-close:hover{ background:rgba(248,113,113,.16); color:#FCA5A5; }

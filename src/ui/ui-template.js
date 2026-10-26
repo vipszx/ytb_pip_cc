@@ -15,6 +15,9 @@
     return String(n);
   }
 
+  const MAX_TEXT_LINES = 3; // 最多占 3 行
+  const MIN_FIT_PX = 11; // 自动缩字号的下限，再小就看不清了
+
   /**
    * 复制到剪贴板：优先 Clipboard API（PiP 与 YouTube 页均为安全上下文），
    * 失败时退回「临时 textarea + execCommand」。
@@ -73,6 +76,62 @@
 
     const copy = makeCopier(doc);
     let toastTimer = 0;
+    const win = doc.defaultView || window;
+
+    /**
+     * 尽量把整句显示完整：3 行放不下就缩字号。
+     * 字号越小、行数只会不变或变少，所以「放不放得下」对字号是单调的，可以二分。
+     */
+    function fitText() {
+      textEl.style.fontSize = '';
+      const cs = win.getComputedStyle(textEl);
+      const base = parseFloat(cs.fontSize) || 20;
+      const lhRatio = (parseFloat(cs.lineHeight) || base * 1.28) / base;
+      const avail = Math.max(24, body.clientHeight - 8); // body 上下内边距各 4px
+      const min = Math.min(base, MIN_FIT_PX);
+
+      const fits = (size) => {
+        textEl.style.fontSize = size + 'px';
+        // 高度预算：可用高度 与 3 行行高，取小的那个
+        return textEl.scrollHeight <= Math.min(avail, size * lhRatio * MAX_TEXT_LINES) + 1;
+      };
+
+      // 量真实高度时必须解除行数上限，否则量到的永远是被截断后的高度
+      const savedClamp = textEl.style.webkitLineClamp;
+      textEl.style.webkitLineClamp = '99';
+      try {
+        if (fits(base)) {
+          textEl.style.fontSize = ''; // 原字号就放得下，交回 CSS 控制
+          return;
+        }
+        if (!fits(min)) return; // 最小字号仍放不下，只能交给 line-clamp 截断
+
+        let lo = min;
+        let hi = base;
+        for (let i = 0; i < 7 && hi - lo > 0.5; i++) {
+          const mid = (lo + hi) / 2;
+          if (fits(mid)) lo = mid;
+          else hi = mid;
+        }
+        fits(lo);
+      } finally {
+        textEl.style.webkitLineClamp = savedClamp;
+      }
+    }
+
+    // 窗口被拖动缩放后重新适配（观察 body，字体变化不会反过来触发它）
+    let ro = null;
+    if (typeof win.ResizeObserver === 'function') {
+      let rafId = 0;
+      ro = new win.ResizeObserver(() => {
+        if (rafId) return;
+        rafId = win.requestAnimationFrame(() => {
+          rafId = 0;
+          fitText();
+        });
+      });
+      ro.observe(body);
+    }
 
     function showToast(msg) {
       toastEl.textContent = msg;
@@ -135,13 +194,17 @@
 
     let lastSpeed = '';
     let lastPlaying = false;
+    let lastFontSize = 0;
+    let needFit = true;
 
     function update(state) {
       if (!state) return;
 
       const fontSize = Number(state.fontSize);
-      if (Number.isFinite(fontSize) && fontSize > 0) {
+      if (Number.isFinite(fontSize) && fontSize > 0 && fontSize !== lastFontSize) {
         root.style.setProperty('--fs', fontSize + 'px');
+        lastFontSize = fontSize;
+        needFit = true;
       }
 
       const text = (state.text || '').trim();
@@ -149,6 +212,7 @@
       const nextText = hasText ? text : state.ccOn ? '等待字幕…' : '字幕未开启 · 点 CC 开启';
 
       if (textEl.textContent !== nextText) {
+        needFit = true;
         // 同一句的流式增长不做动画，只有真正换句才淡入，避免逐字闪烁
         const shown = textEl.dataset.shown || '';
         const grew =
@@ -163,6 +227,12 @@
         textEl.dataset.shown = nextText;
       }
       textEl.classList.toggle('is-placeholder', !hasText);
+
+      // 文字或字号变了才重新量高度，避免每个 tick 都触发重排
+      if (needFit) {
+        needFit = false;
+        fitText();
+      }
 
       const speed = fmtSpeed(state.speed);
       if (speed !== lastSpeed) {
@@ -184,6 +254,7 @@
     }
 
     function destroy() {
+      if (ro) ro.disconnect();
       if (root.parentNode) root.parentNode.removeChild(root);
     }
 
