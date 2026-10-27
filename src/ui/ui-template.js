@@ -220,7 +220,6 @@
     });
 
     const bar = el('div', 'ytbpip-bar');
-    const statusEl = el('div', 'ytbpip-status', '1× · 字幕关');
     const btns = el('div', 'ytbpip-btns');
 
     const makeBtn = (cls, content, title, onClick) => {
@@ -245,14 +244,18 @@
     const speedBtn = makeBtn('is-speed', '1×', '切换常用倍速', () => onCommand('speedCycle'));
     const fasterBtn = makeBtn('', '+', '加速 0.25×', () => onCommand('speedStep', 0.25));
     const sep = el('div', 'ytbpip-sep');
+    const volDownBtn = makeBtn('is-vol-group', '−', '音量 -10%', () => onCommand('volumeStep', -0.1));
+    const volBtn = makeBtn('is-vol is-vol-group', '100%', '静音 / 恢复', () => onCommand('volumeToggle'));
+    const volUpBtn = makeBtn('is-vol-group', '+', '音量 +10%', () => onCommand('volumeStep', 0.1));
+    const sep2 = el('div', 'ytbpip-sep is-vol-group');
     const fontDownBtn = makeBtn('is-font', 'A−', '减小字号', () => onCommand('fontStep', -2));
     const fontUpBtn = makeBtn('is-font', 'A+', '增大字号', () => onCommand('fontStep', 2));
     const ccBtn = makeBtn('', 'CC', '开/关 YouTube 字幕', () => onCommand('toggleCc'));
     const closeBtn = makeBtn('is-close', ICON_CLOSE, '关闭小窗', () => onCommand('closeWindow'));
 
-    [playBtn, slowerBtn, speedBtn, fasterBtn, sep, fontDownBtn, fontUpBtn, ccBtn, closeBtn].forEach((n) => btns.appendChild(n));
+    [playBtn, slowerBtn, speedBtn, fasterBtn, sep, volDownBtn, volBtn, volUpBtn, sep2,
+      fontDownBtn, fontUpBtn, ccBtn, closeBtn].forEach((n) => btns.appendChild(n));
 
-    bar.appendChild(statusEl);
     bar.appendChild(btns);
     body.appendChild(linesEl);
     root.appendChild(body);
@@ -260,6 +263,7 @@
     root.appendChild(toastEl);
 
     let lastSpeed = '';
+    let lastVolume = '';
     let lastPlaying = false;
     let lastFontSize = 0;
     let needFit = true;
@@ -330,9 +334,17 @@
         speedBtn.textContent = speed + '×';
         lastSpeed = speed;
       }
-      statusEl.textContent = speed + '× · ' + (state.ccOn ? '字幕开' : '字幕关');
-      statusEl.classList.toggle('is-off', !state.ccOn);
 
+      // 音量：静音或 0 时直接显示「静音」，点击数值可切换
+      const volPct = Math.round((Number(state.volume) || 0) * 100);
+      const volText = state.muted || volPct <= 0 ? '静音' : volPct + '%';
+      if (volText !== lastVolume) {
+        volBtn.textContent = volText;
+        lastVolume = volText;
+      }
+      volBtn.classList.toggle('is-muted', !!state.muted || volPct <= 0);
+
+      // 字幕开关状态由 CC 按钮自己的选中态表示，不再单独显示一行文本
       ccBtn.classList.toggle('is-on', !!state.ccOn);
 
       const playing = !!state.playing;

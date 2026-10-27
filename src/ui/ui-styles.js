@@ -128,18 +128,8 @@ html, body {
 }
 .ytbpip-bar:active{ cursor:grabbing; }
 
-.ytbpip-status{
-  flex:0 1 auto;
-  font-size:10px;
-  color:var(--fg-2);
-  letter-spacing:.02em;
-  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-  font-variant-numeric:tabular-nums;
-}
-.ytbpip-status.is-off{ color:#FBBF24; }
-
 .ytbpip-btns{
-  margin-left:auto;
+  margin:0 auto; /* 去掉左侧状态文本后，按钮组居中 */
   display:flex; align-items:center; gap:2px;
   flex:0 0 auto;
 }
@@ -167,6 +157,8 @@ html, body {
 .ytbpip-btn.is-on:hover{ background:rgba(255,255,255,.26); color:#fff; }
 
 .ytbpip-btn.is-speed{ min-width:40px; color:#fff; letter-spacing:.02em; }
+.ytbpip-btn.is-vol{ min-width:40px; color:#fff; letter-spacing:.02em; }
+.ytbpip-btn.is-muted{ color:var(--fg-2); }
 .ytbpip-btn.is-close:hover{ background:rgba(248,113,113,.16); color:#FCA5A5; }
 
 .ytbpip-sep{
@@ -176,8 +168,11 @@ html, body {
   margin:0 2px;
 }
 
-@media (max-width: 372px){ .ytbpip-status{ display:none; } }
-@media (max-width: 306px){ .ytbpip-btn.is-font{ display:none; } .ytbpip-sep{ display:none; } }
+/* 窄窗口依次收起：音量 → 字号，保证倍速和播放控制始终可见 */
+@media (max-width: 348px){
+  .ytbpip-btn.is-vol-group, .ytbpip-sep.is-vol-group{ display:none; }
+}
+@media (max-width: 300px){ .ytbpip-btn.is-font{ display:none; } .ytbpip-sep{ display:none; } }
 `;
 
   /**

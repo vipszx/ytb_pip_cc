@@ -36,6 +36,8 @@
       SPEED_CYCLE: 'speedCycle', // 点击倍速数值循环常用档位
       FONT_STEP: 'fontStep', // value: delta
       TOGGLE_CC: 'toggleCc',
+      VOLUME_STEP: 'volumeStep', // 音量微调：value = delta（0.1 = +10%）
+      VOLUME_TOGGLE: 'volumeToggle', // 点击音量数值：静音 / 恢复
       SCROLL: 'scroll', // 歌词模式滚轮翻看：value = +1 向下 / -1 向上
       CLOSE_WINDOW: 'closeWindow'
     },

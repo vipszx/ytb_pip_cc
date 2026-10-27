@@ -42,6 +42,8 @@
     desired: 1,
     lastWrite: 0,
     // prev / next 是数组，按「离当前句由近到远」排列，最多 LYRIC_CONTEXT 条
+    volume: 1, // 0~1，跟着 <video> 走
+    muted: false,
     caption: { text: '', prev: [], next: [], ccOn: false },
     tracker: null,
     pipRemote: false, // MAIN world 托管的 PiP 窗口
@@ -108,6 +110,8 @@
     }
     if (v && v !== S.video) {
       S.video = v;
+      S.volume = v.volume;
+      S.muted = v.muted;
       bindVideo(v);
     } else if (!v) {
       S.video = null;
@@ -152,6 +156,13 @@
 
     ['play', 'pause', 'seeked', 'ended', 'emptied'].forEach((ev) => {
       v.addEventListener(ev, () => syncRender(false));
+    });
+
+    // 在 YouTube 播放器里改音量后，小窗上的数值要跟着变
+    v.addEventListener('volumechange', () => {
+      S.volume = v.volume;
+      S.muted = v.muted;
+      syncRender(false);
     });
 
     v.addEventListener('playing', () => {
@@ -265,6 +276,8 @@
       speed: Math.round(rate * 100) / 100,
       playing: !!(v && !v.paused && !v.ended),
       ccOn: !!ccOn,
+      volume: v && Number.isFinite(v.volume) ? v.volume : S.volume,
+      muted: !!(v && v.muted),
       fontSize: S.settings.fontSize,
       lyrics: S.settings.displayMode === 'lyrics'
     };
@@ -279,6 +292,37 @@
     if (pipHost) pipHost.update(state);
     if (S.pipRemote) P.post(P.EV_TO_MAIN, T.RENDER, state);
     if (S.floatOn && S.floatWin) S.floatWin.update(state);
+  }
+
+  /** 音量微调：delta 为 0~1 的增量，加减后自动解除静音 */
+  function changeVolume(delta) {
+    const v = ensureVideo();
+    if (!v) return;
+    const next = Math.min(1, Math.max(0, Math.round((v.volume + delta) * 100) / 100));
+    try {
+      if (next > 0 && v.muted) v.muted = false;
+      v.volume = next;
+    } catch (e) {
+      /* 某些站点会拒绝写入，忽略 */
+    }
+    S.volume = v.volume;
+    S.muted = v.muted;
+    syncRender(true);
+  }
+
+  /** 点击音量数值：静音 / 恢复（原本音量为 0 时恢复到 30%，否则听不见） */
+  function toggleMute() {
+    const v = ensureVideo();
+    if (!v) return;
+    try {
+      v.muted = !v.muted;
+      if (!v.muted && v.volume === 0) v.volume = 0.3;
+    } catch (e) {
+      /* 同上 */
+    }
+    S.volume = v.volume;
+    S.muted = v.muted;
+    syncRender(true);
   }
 
   /* ---------------- 字幕抓取 ---------------- */
@@ -729,6 +773,14 @@
 
       case CMD.TOGGLE_CC:
         toggleCc();
+        break;
+
+      case CMD.VOLUME_STEP:
+        changeVolume(typeof value === 'number' ? value : 0.1);
+        break;
+
+      case CMD.VOLUME_TOGGLE:
+        toggleMute();
         break;
 
       case CMD.SCROLL:
