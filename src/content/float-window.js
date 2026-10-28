@@ -38,7 +38,13 @@
     const shadow = host.attachShadow({ mode: 'open' });
     G.injectStyles(shadow);
 
+    /** 浮动小窗的宿主在 Shadow DOM 外面，拿不到里面的变量，按主题直接改底色 */
+    function paintHost(isLight) {
+      host.style.background = (G.SURFACE && (isLight ? G.SURFACE.light : G.SURFACE.dark)) || '#2A2A2E';
+    }
+
     const ui = G.createUI(document, {
+      onThemeChange: paintHost,
       onCommand(cmd, value) {
         if (cmd === 'closeWindow') {
           close();

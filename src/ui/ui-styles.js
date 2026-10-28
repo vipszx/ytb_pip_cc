@@ -1,18 +1,60 @@
 /**
  * 样式常量：以字符串形式注入，PiP 窗口（独立 document）与页面内浮动小窗（Shadow DOM）共用，
  * 保证两种形态视觉完全一致。
+ *
+ * 配色全部走 CSS 变量：深色是默认值，`.ytbpip-root.is-light` 只覆盖变量即可切到浅色，
+ * 不需要任何渐变或额外规则。
  */
 (() => {
   const G = (window.__YTBPIP__ = window.__YTBPIP__ || {});
   if (G.CSS) return;
 
+  /** 页面级底色（PiP 窗口的 html/body），由宿主按主题写入 */
+  G.SURFACE = { dark: '#2A2A2E', light: '#FAFAFB' };
+
   G.CSS = `
-:root{
+.ytbpip-root{
   --fs: 20px;
-  --fg-0:#FFFFFF; --fg-1:#C7C7D1; --fg-2:#8A8A99;
+  --fg-0:#FFFFFF;   /* 主要文字 */
+  --fg-1:#C7C7D1;   /* 按钮文字 */
+  --fg-2:#8A8A99;   /* 上下文行 / 占位文字 */
+  --surface:#2A2A2E;
+  --bar:#232327;
+  --line:rgba(255,255,255,.06);
+  --sep:rgba(255,255,255,.09);
+  --text:#FFFFFF;   /* 字幕文字 */
+  --shadow:0 1px 2px rgba(0,0,0,.55);
+  --toast:rgba(0,0,0,.74);
+  --btn-hover:rgba(255,255,255,.08);
+  --btn-on:rgba(255,255,255,.16);
+  --btn-on-hover:rgba(255,255,255,.26);
+  --outline:rgba(255,255,255,.55);
+  --close-hover:rgba(248,113,113,.16);
+  --close-fg:#FCA5A5;
 }
+/* 浅色：刻意不用纯白 + 近黑，底色与文字都留一档，避免刺眼 */
+.ytbpip-root.is-light{
+  --fg-0:#3F4858;
+  --fg-1:#4E5766;
+  --fg-2:#757E8F;
+  --surface:#FAFAFB;
+  --bar:#F0F1F4;
+  --line:rgba(16,24,40,.07);
+  --sep:rgba(16,24,40,.11);
+  --text:#3F4858;
+  --shadow:none;
+  --toast:rgba(16,24,40,.78);
+  --btn-hover:rgba(16,24,40,.05);
+  --btn-on:rgba(16,24,40,.08);
+  --btn-on-hover:rgba(16,24,40,.13);
+  --outline:rgba(16,24,40,.35);
+  --close-hover:rgba(220,38,38,.10);
+  --close-fg:#A8342A;
+}
+/* 页面底色不在这里写：--surface 定义在 .ytbpip-root 上，html 取不到，
+   由宿主（pip-host / float-window）按主题直接写成内联样式 */
 html, body {
-  margin:0; height:100%; background:#2A2A2E; overflow:hidden;
+  margin:0; height:100%; overflow:hidden;
 }
 *, *::before, *::after { box-sizing: border-box; }
 
@@ -27,7 +69,7 @@ html, body {
   font-size:12px;
   line-height:1.3;
   -webkit-font-smoothing:antialiased;
-  background:#2A2A2E;
+  background:var(--surface);
   border:0;
   border-radius:0;
   overflow:hidden;
@@ -44,7 +86,7 @@ html, body {
   overflow:hidden;
 }
 
-/* 歌词式三行：上一句 / 当前句 / 下一句。字号由 ui-template 的 fitText() 实测后调整 */
+/* 歌词式五行：上下各两句 + 当前句。字号由 ui-template 的 fitText() 实测后调整 */
 .ytbpip-lines{
   flex:0 1 auto;
   min-height:0;
@@ -54,7 +96,7 @@ html, body {
 }
 .ytbpip-lines > *{ flex:0 0 auto; }
 
-/* 上下文行（上下各两句）：只比正常小一点点 + 压暗 + 单行截断 */
+/* 上下文行：只比正常小一点点 + 压暗 + 单行截断 */
 .ytbpip-ghost{
   font-size:.88em;
   line-height:1.3;
@@ -67,15 +109,15 @@ html, body {
 .ytbpip-ghost:empty{ display:none; }
 
 .ytbpip-text{
-  /* 1em = .ytbpip-lines 的字号，三行共用同一个缩放比例 */
+  /* 1em = .ytbpip-lines 的字号，所有行共用同一个缩放比例 */
   font-size:1em;
   font-weight:600;
   line-height:1.28;
   letter-spacing:.01em;
   text-align:center;
   text-wrap:balance;
-  color:#fff;
-  text-shadow:0 1px 2px rgba(0,0,0,.55);
+  color:var(--text);
+  text-shadow:var(--shadow);
   display:-webkit-box;
   /* 具体几行由 ui-template 的 fitText() 实测后写成内联样式，这里只是首帧前的兜底 */
   -webkit-line-clamp:3;
@@ -93,7 +135,7 @@ html, body {
   transform:translate(-50%,-50%) scale(.96);
   padding:3px 9px;
   border-radius:6px;
-  background:rgba(0,0,0,.74);
+  background:var(--toast);
   color:#fff;
   font-size:11px;
   font-weight:600;
@@ -122,8 +164,8 @@ html, body {
   height:30px;
   display:flex; align-items:center; gap:6px;
   padding:0 8px;
-  background:#232327;
-  border-top:1px solid rgba(255,255,255,.06);
+  background:var(--bar);
+  border-top:1px solid var(--line);
   cursor:grab;
 }
 .ytbpip-bar:active{ cursor:grabbing; }
@@ -147,24 +189,24 @@ html, body {
   transition:background .12s ease, color .12s ease, transform .1s ease;
   -webkit-tap-highlight-color:transparent;
 }
-.ytbpip-btn:hover{ background:rgba(255,255,255,.08); color:#fff; }
+.ytbpip-btn:hover{ background:var(--btn-hover); color:var(--fg-0); }
 .ytbpip-btn:active{ transform:scale(.93); }
-.ytbpip-btn:focus-visible{ outline:1px solid rgba(255,255,255,.55); outline-offset:1px; }
+.ytbpip-btn:focus-visible{ outline:1px solid var(--outline); outline-offset:1px; }
 .ytbpip-btn svg{ width:12px; height:12px; display:block; fill:currentColor; }
 
-/* 选中态用中性的「更亮的底 + 白字」，不引入彩色 */
-.ytbpip-btn.is-on{ color:#fff; background:rgba(255,255,255,.16); }
-.ytbpip-btn.is-on:hover{ background:rgba(255,255,255,.26); color:#fff; }
+/* 选中态用中性的「更亮的底 + 主文字色」，不引入彩色 */
+.ytbpip-btn.is-on{ color:var(--fg-0); background:var(--btn-on); }
+.ytbpip-btn.is-on:hover{ background:var(--btn-on-hover); color:var(--fg-0); }
 
-.ytbpip-btn.is-speed{ min-width:40px; color:#fff; letter-spacing:.02em; }
-.ytbpip-btn.is-vol{ min-width:40px; color:#fff; letter-spacing:.02em; }
+.ytbpip-btn.is-speed{ min-width:40px; color:var(--fg-0); letter-spacing:.02em; }
+.ytbpip-btn.is-vol{ min-width:40px; color:var(--fg-0); letter-spacing:.02em; }
 .ytbpip-btn.is-muted{ color:var(--fg-2); }
-.ytbpip-btn.is-close:hover{ background:rgba(248,113,113,.16); color:#FCA5A5; }
+.ytbpip-btn.is-close:hover{ background:var(--close-hover); color:var(--close-fg); }
 
 .ytbpip-sep{
   flex:0 0 auto;
   width:1px; height:14px;
-  background:rgba(255,255,255,.09);
+  background:var(--sep);
   margin:0 2px;
 }
 

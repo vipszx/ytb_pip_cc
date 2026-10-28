@@ -51,12 +51,26 @@
     } catch (e) {
       /* 忽略 */
     }
-    doc.documentElement.style.cssText = 'height:100%;margin:0;background:#2A2A2E;overflow:hidden';
-    doc.body.style.cssText = 'margin:0;height:100%;background:#2A2A2E;overflow:hidden';
+    /** PiP 窗口的 html/body 拿不到 .ytbpip-root 上的变量，只能按主题写成内联样式 */
+    function paintPage(isLight) {
+      const bg = (G.SURFACE && (isLight ? G.SURFACE.light : G.SURFACE.dark)) || '#2A2A2E';
+      doc.documentElement.style.cssText =
+        'height:100%;margin:0;overflow:hidden;background:' + bg;
+      doc.body.style.cssText = 'margin:0;height:100%;overflow:hidden;background:' + bg;
+      // color-scheme 会带动浏览器原生 UI（滚动条、窗口边框等）一起切到浅色
+      try {
+        doc.documentElement.style.colorScheme = isLight ? 'light' : 'dark';
+      } catch (e) {
+        /* 老版本不支持，忽略 */
+      }
+    }
+
     doc.body.textContent = '';
     G.injectStyles(doc);
+    paintPage((o.initialState && o.initialState.theme) === 'light');
 
     const ui = G.createUI(doc, {
+      onThemeChange: paintPage,
       onCommand(cmd, value) {
         if (cmd === CMD_CLOSE) {
           handle.close();

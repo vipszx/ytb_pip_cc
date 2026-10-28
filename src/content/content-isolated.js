@@ -279,7 +279,8 @@
       volume: v && Number.isFinite(v.volume) ? v.volume : S.volume,
       muted: !!(v && v.muted),
       fontSize: S.settings.fontSize,
-      lyrics: S.settings.displayMode === 'lyrics'
+      lyrics: S.settings.displayMode === 'lyrics',
+      theme: S.settings.windowTheme
     };
   }
 

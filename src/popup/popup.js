@@ -7,6 +7,8 @@
   const speedVal = document.getElementById('speedVal');
   const speedPills = document.getElementById('speedPills');
   const autoCc = document.getElementById('autoCc');
+  const themeVal = document.getElementById('themeVal');
+  const themePills = document.getElementById('themePills');
   const modeVal = document.getElementById('modeVal');
   const modePills = document.getElementById('modePills');
   const modeHint = document.getElementById('modeHint');
@@ -19,6 +21,11 @@
   const DEFAULT_TIP = tip.textContent;
 
   const PILL_PRESETS = [0.5, 0.75, 1, 1.25, 1.5, 2];
+
+  const THEME_OPTIONS = [
+    { value: 'dark', short: '深色', label: '深色' },
+    { value: 'light', short: '浅色', label: '浅色' }
+  ];
 
   const MODE_OPTIONS = [
     {
@@ -91,6 +98,31 @@
         paintSpeed();
       });
       speedPills.appendChild(btn);
+    });
+  }
+
+  function paintTheme() {
+    const active =
+      THEME_OPTIONS.filter((o) => o.value === current.windowTheme)[0] || THEME_OPTIONS[0];
+    themeVal.textContent = active.short;
+    Array.prototype.forEach.call(themePills.children, (btn) => {
+      btn.classList.toggle('is-on', btn.dataset.theme === active.value);
+    });
+  }
+
+  function buildThemePills() {
+    themePills.textContent = '';
+    THEME_OPTIONS.forEach((opt) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'pill';
+      btn.dataset.theme = opt.value;
+      btn.textContent = opt.label;
+      btn.addEventListener('click', async () => {
+        current = await ST.save({ windowTheme: opt.value });
+        paintTheme();
+      });
+      themePills.appendChild(btn);
     });
   }
 
@@ -218,10 +250,12 @@
       /* 读取失败时沿用默认值 */
     }
     buildPills();
+    buildThemePills();
     buildModePills();
     buildSourcePills();
     paintFont();
     paintSpeed();
+    paintTheme();
     paintMode();
     paintSource();
     autoCc.checked = !!current.autoEnableCC;

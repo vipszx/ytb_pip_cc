@@ -63,6 +63,8 @@
    */
   G.createUI = function createUI(doc, options) {
     const onCommand = (options && options.onCommand) || function () {};
+    // 主题变化时通知宿主，用于同步窗口自身的底色（CSS 变量管不到的地方）
+    const onThemeChange = (options && options.onThemeChange) || null;
 
     const el = (tag, cls, text) => {
       const node = doc.createElement(tag);
@@ -90,7 +92,8 @@
     const copy = makeCopier(doc);
     let toastTimer = 0;
     const win = doc.defaultView || window;
-    let isLyrics = false; // false = 字幕模式（单行大字），true = 歌词模式（三行）
+    let isLyrics = false; // false = 字幕模式（单行大字），true = 歌词模式（多行）
+    let isLight = false; // false = 深色，true = 浅色
 
     /** 0 = 上下各两句；1 = 上下各一句；2 = 只留当前句 */
     function setGhostLevel(level) {
@@ -284,6 +287,14 @@
         root.style.setProperty('--fs', fontSize + 'px');
         lastFontSize = fontSize;
         needFit = true;
+      }
+
+      // 主题：只切换根元素上的类，配色差异全部由 CSS 变量承担
+      const light = state.theme === 'light';
+      if (light !== isLight) {
+        isLight = light;
+        root.classList.toggle('is-light', isLight);
+        if (onThemeChange) onThemeChange(isLight);
       }
 
       const text = (state.text || '').trim();

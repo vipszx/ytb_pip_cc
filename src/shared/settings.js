@@ -13,8 +13,10 @@
     autoEnableCC: true, // 打开小窗时自动开启 YouTube 字幕
     // 'track' = 接口取完整字幕轨道；'dom' = 抓取播放器当前渲染的字幕
     captionSource: 'track',
-    // 'lyrics' = 歌词式三行（可滚轮翻看）；'subtitle' = 单行大字
-    displayMode: 'lyrics'
+    // 'lyrics' = 歌词式多行（可滚轮翻看）；'subtitle' = 单行大字
+    displayMode: 'lyrics',
+    // 'dark' = 深色小窗；'light' = 白底浅色小窗
+    windowTheme: 'dark'
   };
 
   const FONT_MIN = 12;
@@ -44,7 +46,8 @@
       speed: clampSpeed(merged.speed),
       autoEnableCC: !!merged.autoEnableCC,
       captionSource: merged.captionSource === 'dom' ? 'dom' : 'track',
-      displayMode: merged.displayMode === 'subtitle' ? 'subtitle' : 'lyrics'
+      displayMode: merged.displayMode === 'subtitle' ? 'subtitle' : 'lyrics',
+      windowTheme: merged.windowTheme === 'light' ? 'light' : 'dark'
     };
   }
 
